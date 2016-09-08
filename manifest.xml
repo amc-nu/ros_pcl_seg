@@ -1,0 +1,18 @@
+<package>
+  <description brief="ros_pcl_segm">
+
+     ros_pcl_segm
+
+  </description>
+  <author>amc</author>
+  <license>BSD</license>
+  <review status="unreviewed" notes=""/>
+  <url></url>
+  <depend package="pcl_conversions"/>
+  <depend package="pcl_ros"/>
+  <depend package="roscpp"/>
+  <depend package="sensor_msgs"/>
+
+</package>
+
+
