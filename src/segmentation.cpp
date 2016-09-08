@@ -65,6 +65,8 @@ std_msgs::Header _ndt_header;
 bool _map_transformed;
 bool _using_sensor_cloud;
 
+std::string _current_frame="world";// 'map' when using local map, 'world' when using global map
+
 void publishCloud(ros::Publisher* in_publisher, pcl::PointCloud<pcl::PointXYZ>::Ptr in_cloud_to_publish_ptr)
 {
 	sensor_msgs::PointCloud2 cloud_msg;
@@ -79,6 +81,7 @@ void publishColorCloud(ros::Publisher* in_publisher, pcl::PointCloud<pcl::PointX
 	in_publisher->publish(cloud_msg);
 }
 
+//only used if map frame is required to be transformed to world (i.e. a map coordinates are global)
 void map_callback (const sensor_msgs::PointCloud2ConstPtr& in_map_cloud)
 {
 	pcl::PointCloud<pcl::PointXYZ> map_cloud;
@@ -95,7 +98,7 @@ void map_callback (const sensor_msgs::PointCloud2ConstPtr& in_map_cloud)
 		pcl_ros::transformPointCloud(map_cloud, 	//velodyne points in velodyne frame coords
 										_worldmap_cloud, //velodyne points in map frame coords
 										*_transform);
-		_worldmap_cloud.header.frame_id="world";
+		_worldmap_cloud.header.frame_id="world";//<--always world, to shift global coords
 		publishCloud(&pub_worldmap_cloud, _worldmap_cloud.makeShared());
 		ROS_INFO("Map published as points_world in world frame");
 		std::cout << _worldmap_cloud.points[0] << std::endl;
@@ -180,7 +183,7 @@ void transformAndFilterMap(pcl::PointCloud<pcl::PointXYZ>::Ptr in_cloud_ptr, pcl
 			return;
 		}
 		//2. Transform Velodyne points' coords to map frame
-		_transform_listener->lookupTransform("/world", "/velodyne",
+		_transform_listener->lookupTransform(_current_frame, "/velodyne",
 				ros::Time(_ndt_header.stamp), *_transform);
 
 		if(in_cloud_ptr->points.size()<=0)
@@ -193,7 +196,7 @@ void transformAndFilterMap(pcl::PointCloud<pcl::PointXYZ>::Ptr in_cloud_ptr, pcl
 										velodyne_transformed, //velodyne points in map frame coords
 										*_transform);
 
-		velodyne_transformed.header.frame_id="world";//change also frame to map
+		velodyne_transformed.header.frame_id=_current_frame;//change also frame to map
 
 		//3. get each velodyne point in map's coords and check for each octomap voxel if its "occupied"
 		std::vector<bool> found_point_index(velodyne_transformed.points.size(), false);//vector to store the indices of the points found in an occupied octomap voxel
@@ -334,7 +337,7 @@ void clusterAndColor(pcl::PointCloud<pcl::PointXYZ>::Ptr in_cloud_ptr, pcl::Poin
 
 	jsk_recognition_msgs::BoundingBoxArray boundingbox_array;
 	boundingbox_array.header = _ndt_header;
-	boundingbox_array.header.frame_id="world";
+	boundingbox_array.header.frame_id=_current_frame;
 
 	for (std::vector<pcl::PointIndices>::const_iterator it = cluster_indices.begin(); it != cluster_indices.end(); ++it)
 	{
@@ -392,7 +395,7 @@ void clusterAndColor(pcl::PointCloud<pcl::PointXYZ>::Ptr in_cloud_ptr, pcl::Poin
 
 		jsk_recognition_msgs::BoundingBox bounding_box;
 		bounding_box.header = _ndt_header;
-		bounding_box.header.frame_id="world";
+		bounding_box.header.frame_id="map";
 
 		bounding_box.pose.position.x = min_point.x + l/2;
 		bounding_box.pose.position.y = min_point.y + w/2;
@@ -417,7 +420,7 @@ void clusterAndColor(pcl::PointCloud<pcl::PointXYZ>::Ptr in_cloud_ptr, pcl::Poin
 
 		double rz = atan(slope);
 
-		tf::Quaternion quat = tf::createQuaternionFromRPY(0.0, 0.0, 0.0);
+		tf::Quaternion quat = tf::createQuaternionFromRPY(0.0, 0.0, rz);
 
 		tf::quaternionTFToMsg(quat, bounding_box.pose.orientation);
 
@@ -440,7 +443,7 @@ void clusterAndColor(pcl::PointCloud<pcl::PointXYZ>::Ptr in_cloud_ptr, pcl::Poin
 	//---	4. Publish
 	//convert back to ros
 	pcl_conversions::toPCL(_ndt_header, out_cloud_ptr->header);
-	out_cloud_ptr->header.frame_id="world";
+	out_cloud_ptr->header.frame_id=_current_frame;
 	// Publish the data
 	//pub_cluster_cloud.publish(final_cluster);
 	pub_jsk_boundingboxes.publish(boundingbox_array);
